@@ -68,30 +68,44 @@ Write-Debug "CheckIfNASisAvailable Result: $ret"
 if ( $ret -ne "True" )
 {
     Write-Error "NAS $dest_hostname is not available => please check or inform your Administrator !!! Press any key to close this window" 
-    $x = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
     throw 
 }
 
 
-
-# check if backup has been performed already today
-# by looking at Log-File change date
-
-# When backup is needed wait for NAS being available
-
-# Start backup
-#$host_name, $user_name = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name -split "\\"
-#$homedir = (Get-AdUser -filter {name -eq $user_name} -properties *).HomeDirectory  # Problem Get-AdUser nicht Standard in Win10 
+# Set Variables for further steps
 $host_name = $env:COMPUTERNAME
 $user_name = $env:USERNAME
 $src_dir   = $env:USERPROFILE # $env:HOMEDRIVE + "\" + $env:HOMEPATH # Backup whole user directory
 $dest_dir  = "\\$dest_hostname\$user_name\$host_name\"
+$act_date  = Get-Date -Format yyyy-MM-dd
+$myScriptName = $MyInvocation.MyCommand.Name.Replace(".ps1", "")
+$log_file  = "$dest_dir" + $act_date + "_" + $myScriptName + ".log"
 
-Write-Debug "Start Backup for $host_name - User: $user_name  SourceLocation:$src_dir to DestLocation:$dest_dir "
+Write-Debug "act_date: $act_date myScriptName: $myScriptName log_file: $log_file"
 
-# Inform User about backup status
+# check if backup has been performed already today
+# by looking at Log-File change date
+# to do: also check existing log file for last entry eq SUCCESS !
+if ( ! (Test-Path $log_file -PathType Leaf) )
+{
+    # Create Log-File since it does not exist yet (-force: create subdirs if not exiting)
+    New-Item -ItemType "file" -Path $log_file -force
+    
+    # Start backup
+    Write-Debug "Start Backup for $host_name - User: $user_name  SourceLocation:$src_dir to DestLocation:$dest_dir "
+    Set-Content -Path $log_file "Start Backup"
+    Add-Content -Path $log_file  "SUCCESS"
+
+    # Inform User about backup status
+}
+else {
+    Write-Host "Logfile $log_file already exists" -ForegroundColor Green
+}
+
+
 
 # exit programm
 Write-Host "NAS $dest_hostname is now available! Press any key to close this window" -ForegroundColor Green
-$x = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+$host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 
