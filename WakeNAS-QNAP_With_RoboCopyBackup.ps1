@@ -10,6 +10,7 @@ Set-StrictMode -Version Latest
 #Add-LoggingTarget -Name Console -Configuration @{Level = 'DEBUG'; Format = '[%{filename}] [%{caller}] %{message}'}
 #$DebugPreference = 'Continue'
 $DebugPreference = 'Continue'
+$InformationPreference = 'Continue'
 
 
 # Import needed modules
@@ -71,7 +72,8 @@ function CheckIfNASisAavailable (
     param($src, $dst, $exclude_dirs, $exclude_files, $log)
     #New-Item -Force $log | Out-Null
     # Execute a command
-    robocopy $src $dst /MIR /ZB /MT /XJ /XD $exclude_dirs /XF $exclude_files /R:3 /LOG:$log /NP
+    #robocopy $src $dst /MIR /ZB /MT /XJ /XD $exclude_dirs /XF $exclude_files /R:3 /LOG:$log /NP
+    robocopy $src $dst /MIR /MT /XJ /XD $exclude_dirs /XF $exclude_files /R:3 /LOG:$log /NP /tee /L
         # /MIR  # mirroring the folders, removing non-existant files. We don't want lots of old files cluttering up the backup and the File Shares should keep a history on their own
         # /ZB   # copies files such that if they are interrupted part-way, they can be restarted (should be default IMHO)
         # /MT   # copies using multiple cores, good for many small files
@@ -81,7 +83,10 @@ function CheckIfNASisAavailable (
         # /R:3  # Retrying a file only 3 times, we don't want bad permissions or other dumb stuff to halt the entire backup
         # /LOG:$log # Logging to a file internally, the best way to log with the /MT flag
         # /NP   # Removing percentages from the log, they don't format well
-    "Backup directory is complete. [$src -> $dst] ($log)"
+        # /tee 	Schreibt die Status Ausgabe in das Konsolenfenster sowie in die Protokolldatei.
+        # /m 	Kopiert nur Dateien, für die das Archive -Attribut festgelegt ist, und setzt das Archiv Attribut zurück.
+        # /l    Gibt an, dass Dateien nur aufgelistet werden sollen (nicht kopiert, gelöscht oder Zeitstempel).    
+    #"Backup directory is complete. [$src -> $dst] ($log)"
 }
 
 
@@ -106,8 +111,10 @@ $host_name = $env:COMPUTERNAME
 $user_name = $env:USERNAME
 $src_dir   = $env:USERPROFILE # $env:HOMEDRIVE + "\" + $env:HOMEPATH # Backup whole user directory
 $dest_dir  = "\\$dest_hostname\$user_name\$host_name\"
-$exclude_dirs = @("temp", "cache", "chaching", "thumbnails", "service", "session", "packages", "update", "diagnostic")
-$exclude_files = @("*cache*", "*.log", "*thumbnail*", "*.tmp")
+$exclude_dirs = @("temp*", "*cache*", "*caching*", "thumbnails", "service", "session", "*cookies*", "update", "diagnostic", "logs",
+                   "*UbuntuonWindows*", "QtWebEngine", "Programs\Microsoft VS Code", "mingw64", "*Microsoft.*") #, "Chrome\User Data\*\Extensions", "\Edge\*\Snapshots")
+$exclude_files = @("*cache*", "*.log", "*thumbnail*", "*.tmp", "*.lnk", "*.lock", "*.old")
+
 $act_date  = Get-Date -Format yyyy-MM-dd
 $myScriptName = $MyInvocation.MyCommand.Name.Replace(".ps1", "")
 $log_file  = "$dest_dir" + $act_date + "_" + $myScriptName + ".log"
@@ -115,27 +122,25 @@ $log_file  = "$dest_dir" + $act_date + "_" + $myScriptName + ".log"
 Write-Debug "act_date: $act_date myScriptName: $myScriptName log_file: $log_file"
 
 # check if backup has been performed already today
-# by looking at Log-File change date
-# to do: also check existing log file for last entry eq SUCCESS !
 if ( ! (Test-Path $log_file -PathType Leaf) )
 {
     # Create Log-File since it does not exist yet (-force: create subdirs if not exiting)
     New-Item -ItemType "file" -Path $log_file -force
+
+    # check existing log file for last entry eq SUCCESS !
     
     # Start backup
     Write-Debug "Start Backup for $host_name - User: $user_name  SourceLocation:$src_dir to DestLocation:$dest_dir "
     Set-Content -Path $log_file "Start Backup"
 
-    Start-Job $robocopy_block -ArgumentList $src_dir, $dest_dir, $exclude_dirs, $exclude_files, $log_file -Name "backup-$src_dir" | Out-Null
-    # Wait for all to complete
-    While (Get-Job -State "Running") { Start-Sleep 2 }
-    # Display output from all jobs
-    Get-Job | Receive-Job
-    # Cleanup
-    Remove-Job *
+    $ret = Invoke-Command $robocopy_block -ArgumentList $src_dir, $dest_dir, $exclude_dirs, $exclude_files, $log_file #-Name "backup-$src_dir" #| Out-Null
+    Write-Debug "Result of Robocopy: $ret"
+    if ($ret -eq "TRUE") {
+        # finalize Logfile
+        Add-Content -Path $log_file  "SUCCESS"
+    }
+    
 
-    # finalize Logfile
-    Add-Content -Path $log_file  "SUCCESS"
 
     # Inform User about backup status
 }
