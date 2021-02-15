@@ -8,6 +8,7 @@ Set-StrictMode -Version Latest
 
 # Set Logging - Level to DEBUG https://logging.readthedocs.io/en/latest/
 #Add-LoggingTarget -Name Console -Configuration @{Level = 'DEBUG'; Format = '[%{filename}] [%{caller}] %{message}'}
+#$DebugPreference = 'Continue'
 $DebugPreference = 'Continue'
 
 
@@ -16,8 +17,12 @@ $DebugPreference = 'Continue'
 Import-Module .\modules\WakeOnLan.psm1
 
 # global vars and consts
-Set-Variable -Name "dest_hostname" -value "nas-qnap" -Scope global -Option constant        # Name of NAS Server
-Set-Variable -Name "dest_mac" -value "24:5E:BE:40:CB:50" -Scope global -Option Constant    # MAC of NAS Server
+# for difference of Constant and ReadOnly see https://tommymaynard.com/protect-your-variables-with-readonly-and-constant-options-2015/
+#   and https://powershell.org/forums/topic/constants-in-powershell/
+#Remove-Variable -Name "dest_hostname" -Force
+New-Variable -Name "dest_hostname" -value "nas-qnap" -Scope global -Option ReadOnly -Force      # Name of NAS Server
+#Remove-Variable -Name "dest_mac" -Force
+New-Variable -Name "dest_mac" -value "24:5E:BE:40:CB:50" -Scope global -Option ReadOnly -Force    # MAC of NAS Server
 
 
 function CheckIfNASisAavailable (
@@ -30,7 +35,9 @@ function CheckIfNASisAavailable (
     ) 
 {
     $run_count = 0
-    $total_time = 0
+
+    $start_date = Get-Date 
+    $duration = 0
 
     Write-Debug "Check if network connectivity to $ServerName (MAC: $MAC) is given"
     
@@ -38,23 +45,44 @@ function CheckIfNASisAavailable (
     do {
 		# fire WakeOnLan IP-package independent of server status since it does not hurt and keeps this code easier :-)
 		Write-Debug "Wake up $ServerName $MAC "
-		Invoke-WakeOnLan -MacAddress $dest_mac -Verbose
+		Invoke-WakeOnLan -MacAddress $dest_mac # -Verbose
 
-        $testResult = (Test-NetConnection -ComputerName $ServerName -CommonTCPPort SMB).TcpTestSucceeded
+        $testResult = (Test-NetConnection -ComputerName $ServerName -CommonTCPPort SMB -InformationLevel "Quiet") #.TcpTestSucceeded -> only available in InformationLevel Detailed
         Write-Debug "run_count: $run_count - Test Result: $testResult"
         if ($testResult -ne "True")
         {
             # no connection -> wait some time before retry
             $run_count++
             Start-Sleep -Seconds $LoopWaitTimeSec
-            $total_time = $run_count * $LoopWaitTimeSec
-            Write-Debug ("Waiting for $ServerName to come up since $total_time seconds")
+            $duration = New-TimeSpan -Start $start_date -End (Get-Date)
+            Write-Debug ("Waiting for $ServerName to come up since $duration")
         }
     } until ( ($testResult -eq "True") -or ($total_time -gt $MaxWaitTimeSec))
+
+    $duration = New-TimeSpan -Start $start_date -End (Get-Date)
+    Write-Information ("NAS startup duration: $duration")
 
     # return current network status
     return $testResult
   }
+
+
+  $robocopy_block = {
+    param($src, $dst, $exclude_dirs, $exclude_files, $log)
+    #New-Item -Force $log | Out-Null
+    # Execute a command
+    robocopy $src $dst /MIR /ZB /MT /XJ /XD $exclude_dirs /XF $exclude_files /R:3 /LOG:$log /NP
+        # /MIR  # mirroring the folders, removing non-existant files. We don't want lots of old files cluttering up the backup and the File Shares should keep a history on their own
+        # /ZB   # copies files such that if they are interrupted part-way, they can be restarted (should be default IMHO)
+        # /MT   # copies using multiple cores, good for many small files
+        # /XJ   # Ignoring junctions, they can cause infinite loops when recursing through folders
+        # /XD   # directories shouldn't have important data files
+        # /XF   # exclude files
+        # /R:3  # Retrying a file only 3 times, we don't want bad permissions or other dumb stuff to halt the entire backup
+        # /LOG:$log # Logging to a file internally, the best way to log with the /MT flag
+        # /NP   # Removing percentages from the log, they don't format well
+    "Backup directory is complete. [$src -> $dst] ($log)"
+}
 
 
 
@@ -78,6 +106,8 @@ $host_name = $env:COMPUTERNAME
 $user_name = $env:USERNAME
 $src_dir   = $env:USERPROFILE # $env:HOMEDRIVE + "\" + $env:HOMEPATH # Backup whole user directory
 $dest_dir  = "\\$dest_hostname\$user_name\$host_name\"
+$exclude_dirs = @("temp", "cache", "chaching", "thumbnails", "service", "session", "packages", "update", "diagnostic")
+$exclude_files = @("*cache*", "*.log", "*thumbnail*", "*.tmp")
 $act_date  = Get-Date -Format yyyy-MM-dd
 $myScriptName = $MyInvocation.MyCommand.Name.Replace(".ps1", "")
 $log_file  = "$dest_dir" + $act_date + "_" + $myScriptName + ".log"
@@ -95,6 +125,16 @@ if ( ! (Test-Path $log_file -PathType Leaf) )
     # Start backup
     Write-Debug "Start Backup for $host_name - User: $user_name  SourceLocation:$src_dir to DestLocation:$dest_dir "
     Set-Content -Path $log_file "Start Backup"
+
+    Start-Job $robocopy_block -ArgumentList $src_dir, $dest_dir, $exclude_dirs, $exclude_files, $log_file -Name "backup-$src_dir" | Out-Null
+    # Wait for all to complete
+    While (Get-Job -State "Running") { Start-Sleep 2 }
+    # Display output from all jobs
+    Get-Job | Receive-Job
+    # Cleanup
+    Remove-Job *
+
+    # finalize Logfile
     Add-Content -Path $log_file  "SUCCESS"
 
     # Inform User about backup status
