@@ -73,7 +73,7 @@ function CheckIfNASisAavailable (
     #New-Item -Force $log | Out-Null
     # Execute a command
     #robocopy $src $dst /MIR /ZB /MT /XJ /XD $exclude_dirs /XF $exclude_files /R:3 /LOG:$log /NP
-    robocopy $src $dst /MIR /MT /XJ /XD $exclude_dirs /XF $exclude_files /R:3 /LOG:$log /NP /tee /L
+    robocopy $src $dst /MIR /MT /XJ /XD $exclude_dirs /XF $exclude_files /R:3 /LOG:$log /NP # /tee /L
         # /MIR  # mirroring the folders, removing non-existant files. We don't want lots of old files cluttering up the backup and the File Shares should keep a history on their own
         # /ZB   # copies files such that if they are interrupted part-way, they can be restarted (should be default IMHO)
         # /MT   # copies using multiple cores, good for many small files
