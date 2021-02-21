@@ -36,6 +36,7 @@ function CheckIfNASisAavailable (
     ) 
 {
     $run_count = 0
+    $maxWaitTimeSpan = New-TimeSpan -Seconds $MaxWaitTimeSec
 
     $start_date = Get-Date 
     $duration = 0
@@ -58,7 +59,7 @@ function CheckIfNASisAavailable (
             $duration = New-TimeSpan -Start $start_date -End (Get-Date)
             Write-Debug ("Waiting for $ServerName to come up since $duration")
         }
-    } until ( ($testResult -eq "True") -or ($total_time -gt $MaxWaitTimeSec))
+    } until ( ($testResult -eq "True") -or ($duration -gt $maxWaitTimeSpan))
 
     $duration = New-TimeSpan -Start $start_date -End (Get-Date)
     Write-Information ("NAS startup duration: $duration")
@@ -113,7 +114,7 @@ $src_dir   = $env:USERPROFILE # $env:HOMEDRIVE + "\" + $env:HOMEPATH # Backup wh
 $dest_dir  = "\\$dest_hostname\$user_name\$host_name\"
 $exclude_dirs = @("temp*", "*cache*", "*caching*", "thumbnails", "service", "session", "*cookies*", "update", "diagnostic", "logs",
                    "*UbuntuonWindows*", "QtWebEngine", "Programs\Microsoft VS Code", "mingw64", "*Microsoft.*") #, "Chrome\User Data\*\Extensions", "\Edge\*\Snapshots")
-$exclude_files = @("*cache*", "*.log", "*thumbnail*", "*.tmp", "*.lnk", "*.lock", "*.old")
+$exclude_files = @("*cache*", "*.log", "*thumbnail*", "*.tmp", "*.lnk", "*.lock", "*.old", "NTUSER.DAT")
 
 $act_date  = Get-Date -Format yyyy-MM-dd
 $myScriptName = $MyInvocation.MyCommand.Name.Replace(".ps1", "")
