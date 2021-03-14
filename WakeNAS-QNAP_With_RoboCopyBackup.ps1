@@ -49,6 +49,7 @@ function CheckIfNASisAavailable (
 		Write-Debug "Wake up $ServerName $MAC "
 		Invoke-WakeOnLan -MacAddress $dest_mac # -Verbose
 
+        $Global:ProgressPreference = 'SilentlyContinue' # avoid 'Progress bar' on top of script
         $testResult = (Test-NetConnection -ComputerName $ServerName -CommonTCPPort SMB -InformationLevel "Quiet") #.TcpTestSucceeded -> only available in InformationLevel Detailed
         Write-Debug "run_count: $run_count - Test Result: $testResult"
         if ($testResult -ne "True")
