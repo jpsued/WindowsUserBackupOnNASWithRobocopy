@@ -111,12 +111,15 @@ if ( $ret -ne "True" )
 # Set Variables for further steps
 $host_name = $env:COMPUTERNAME
 $user_name = $env:USERNAME
-$src_dir   = $env:USERPROFILE # $env:HOMEDRIVE + "\" + $env:HOMEPATH # Backup whole user directory
+$src_dir   = $env:USERPROFILE # z.B C:\Users\jolip C:\Users\Joachim - Backup whole user directory
 $dest_dir  = "\\$dest_hostname\$user_name\$host_name\"
 $exclude_dirs = @("temp*", "*cache*", "*caching*", "thumbnails", "service", "session", "*cookies*", "update", "diagnostic", "logs",
                    "*UbuntuonWindows*", "QtWebEngine", "Programs\Microsoft VS Code", "mingw64", "*Microsoft.*", "*+++*",
-                   "*datareporting*", "*.vscode*") #, "Chrome\User Data\*\Extensions", "\Edge\*\Snapshots")
-$exclude_files = @("*cache*", "*.log", "*thumbnail*", "*.tmp", "*.lnk", "*.lock", "*.old", "NTUSER.DAT", "settings.dat")
+                   "*datareporting*", "*.vscode*", "discord", "TS3Client", "Helium", #) #, "Chrome\User Data\*\Extensions", "\Edge\*\Snapshots")
+                   "$env:LOCALAPPDATA\Comms\UnistoreDB", 
+                   $env:OneDrive) 
+$exclude_files = @("*cache*", "*.log", "*thumbnail*", "*.tmp", "*.lnk", "*.lock", "*.old", "NTUSER.DAT", "settings.dat",
+                   "User.dat", "UserClasses.dat") # Marlon
 
 $act_date  = Get-Date -Format yyyy-MM-dd
 $myScriptName = $MyInvocation.MyCommand.Name.Replace(".ps1", "")
@@ -153,7 +156,7 @@ else {
 }
 
 
-
+# TODO: remove older log files
 # exit programm
 Write-Host "NAS $dest_hostname is now available! Press any key to close this window" -ForegroundColor Green
 $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
